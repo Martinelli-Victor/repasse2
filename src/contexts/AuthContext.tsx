@@ -1,19 +1,22 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { api } from '../services/api';
+import { authService } from '../services/auth';
+import { toast } from 'react-toastify';
 
 interface User {
   id: string;
-  name: string;
-  email: string;
-  role: 'user' | 'admin';
+  name: string | null;
+  email: string | null;
+  photoURL: string | null;
 }
 
 interface AuthContextData {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => void;
+  signIn: (credentials: { email: string; password: string }) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithFacebook: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 interface AuthProviderProps {
@@ -27,45 +30,67 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadStoredData() {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-
-      if (storedToken && storedUser) {
-        api.defaults.headers.Authorization = `Bearer ${storedToken}`;
-        setUser(JSON.parse(storedUser));
+    const unsubscribe = authService.onAuthStateChanged((user) => {
+      if (user) {
+        setUser({
+          id: user.uid,
+          name: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+        });
+      } else {
+        setUser(null);
       }
-
       setLoading(false);
-    }
+    });
 
-    loadStoredData();
+    return () => unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (credentials: { email: string; password: string }) => {
     try {
-      const response = await api.post('/auth/login', {
-        email,
-        password,
-      });
-
-      const { token, user: userData } = response.data;
-
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-
-      api.defaults.headers.Authorization = `Bearer ${token}`;
-      setUser(userData);
+      // Implementar login com email/senha
+      toast.error('Login com email/senha ainda não implementado');
     } catch (error) {
-      throw new Error('Falha na autenticação');
+      toast.error('Erro ao fazer login');
+      throw error;
     }
   };
 
-  const signOut = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    api.defaults.headers.Authorization = '';
-    setUser(null);
+  const signInWithGoogle = async () => {
+    try {
+      const response = await authService.signInWithGoogle();
+      setUser(response.user);
+      localStorage.setItem('@Repasse2:token', response.token);
+      toast.success('Login realizado com sucesso!');
+    } catch (error) {
+      toast.error((error as Error).message);
+      throw error;
+    }
+  };
+
+  const signInWithFacebook = async () => {
+    try {
+      const response = await authService.signInWithFacebook();
+      setUser(response.user);
+      localStorage.setItem('@Repasse2:token', response.token);
+      toast.success('Login realizado com sucesso!');
+    } catch (error) {
+      toast.error((error as Error).message);
+      throw error;
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await authService.signOut();
+      setUser(null);
+      localStorage.removeItem('@Repasse2:token');
+      toast.success('Logout realizado com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao fazer logout');
+      throw error;
+    }
   };
 
   return (
@@ -75,6 +100,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isAuthenticated: !!user,
         loading,
         signIn,
+        signInWithGoogle,
+        signInWithFacebook,
         signOut,
       }}
     >
@@ -91,4 +118,4 @@ export function useAuth(): AuthContextData {
   }
 
   return context;
-} 
+}
